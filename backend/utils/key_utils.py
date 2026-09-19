@@ -28,7 +28,5 @@ def workflow_config_adapt(config: dict) -> dict:
     if new_config.get("workflow_llm_model"):
         new_config["model_select"] = new_config.get("workflow_llm_model")
         new_config["workflow_llm_model"] = None
-    else:
-        new_config["model_select"] = None
 
     return new_config

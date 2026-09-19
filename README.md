@@ -4,6 +4,8 @@
 
 # 🎯 ComfyUI-Copilot: Your Intelligent Assistant for ComfyUI
 
+> This fork uses one OpenAI-compatible configuration for chat, node assistance, workflow generation, debugging, and editing. It does not depend on the upstream RSA, telemetry, or remote MCP services.
+
 <!-- Enhancing Image Generation Development with Smart Assistance -->
 
 <h4 align="center">

@@ -33,15 +33,12 @@ import type { TabType } from '../context/ChatContext';
 import { ParameterDebugInterface } from "../components/debug/ParameterDebugInterfaceV2";
 import { COPILOT_EVENTS } from "../constants/events";
 import { app } from "../utils/comfyapp";
-import { config } from "../config";
 import { mergeByKeyCombine } from "../utils/tools";
 import useLanguage from "../hooks/useLanguage";
 import StartLink from "../components/ui/StartLink";
 import StartPopView from "../components/ui/StartPopView";
 import { LocalStorageKeys, setLocalStorage } from "../utils/localStorageManager";
 import TabButton from "../components/ui/TabButton";
-
-const BASE_URL = config.apiBaseUrl
 
 interface WorkflowChatProps {
     onClose?: () => void;
@@ -180,7 +177,7 @@ export default function WorkflowChat({ onClose, visible = true, triggerUsage = f
     const [width, setWidth] = useState(window.innerWidth / 3);
     const [isResizing, setIsResizing] = useState(false);
     const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
-    const [selectedModel, setSelectedModel] = useState<string>("gemini-2.5-flash");
+    const [selectedModel, setSelectedModel] = useState<string>(() => localStorage.getItem('workflowLLMModel') || '');
     const [height, setHeight] = useState<number>(window.innerHeight);
     const [topPosition, setTopPosition] = useState<number>(0);
     // 添加公告状态
@@ -752,6 +749,7 @@ export default function WorkflowChat({ onClose, visible = true, triggerUsage = f
     };
 
     const handleConfigurationUpdated = () => {
+        setSelectedModel(localStorage.getItem('workflowLLMModel') || '');
         // Refresh the models list in ChatInput when API configuration is updated
         if (chatInputRef.current) {
             chatInputRef.current.refreshModels();
@@ -768,19 +766,18 @@ export default function WorkflowChat({ onClose, visible = true, triggerUsage = f
     };
 
     const uploadImage = async (file: File, id: string) => {
-        const formData = new FormData();
-        formData.append('file', file); 
-        const response = await fetch(`${BASE_URL}/api/chat/imgfile2oss`, {
-            method: 'POST',
-            body: formData
-        });
-        const data = await response.json();
         await WorkflowChatAPI.uploadImage(file);
-        return data.success ? {
-            url: data.data,
+        const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result));
+            reader.onerror = () => reject(reader.error);
+            reader.readAsDataURL(file);
+        });
+        return {
+            url: dataUrl,
             file,
             id
-         } : null;
+        };
     }
 
     const handleUploadImages = (files: FileList) => {

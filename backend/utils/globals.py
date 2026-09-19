@@ -99,19 +99,18 @@ def set_comfyui_copilot_api_key(api_key: str) -> None:
     _global_state.set('comfyui_copilot_api_key', api_key)
 
 
-BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL", "https://comfyui-copilot-server.onrender.com")
+BACKEND_BASE_URL = os.getenv("BACKEND_BASE_URL") or ""
 LMSTUDIO_DEFAULT_BASE_URL = "http://localhost:1234/v1"
-WORKFLOW_MODEL_NAME = os.getenv("WORKFLOW_MODEL_NAME", "us.anthropic.claude-sonnet-4-20250514-v1:0")
+WORKFLOW_MODEL_NAME = os.getenv("WORKFLOW_MODEL_NAME") or "gpt-4o-mini"
 # WORKFLOW_MODEL_NAME = "gpt-5-2025-08-07-GlobalStandard"
-LLM_DEFAULT_BASE_URL = "https://comfyui-copilot-server.onrender.com/v1"
+LLM_DEFAULT_BASE_URL = os.getenv("CC_OPENAI_BASE_URL") or LMSTUDIO_DEFAULT_BASE_URL
 
 # LLM-related env defaults (used as fallback when request config does not provide values)
 OPENAI_API_KEY = os.getenv("CC_OPENAI_API_KEY") or None
 OPENAI_BASE_URL = os.getenv("CC_OPENAI_BASE_URL") or None
 WORKFLOW_LLM_API_KEY = os.getenv("WORKFLOW_LLM_API_KEY") or None
 WORKFLOW_LLM_BASE_URL = os.getenv("WORKFLOW_LLM_BASE_URL") or None
-# If WORKFLOW_LLM_MODEL is not set, fall back to WORKFLOW_MODEL_NAME
-WORKFLOW_LLM_MODEL = os.getenv("WORKFLOW_LLM_MODEL") or WORKFLOW_MODEL_NAME
+WORKFLOW_LLM_MODEL = os.getenv("WORKFLOW_LLM_MODEL") or None
 DISABLE_WORKFLOW_GEN = os.getenv("DISABLE_WORKFLOW_GEN") or False
 
 TENANT_ID = os.getenv("TENANT_ID") or None

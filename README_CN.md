@@ -4,6 +4,8 @@
 
 # 🎯 ComfyUI-Copilot: ComfyUI 智能助手
 
+> 本 Fork 使用统一的 OpenAI-compatible 配置。聊天、节点说明、工作流生成、调试和修改均直接调用用户配置的模型，不依赖原项目的 RSA、遥测或远程 MCP 服务。
+
 <h4 align="center">
 
 <div align="center">

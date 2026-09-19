@@ -51,10 +51,10 @@ def create_workflow_rewrite_agent():
         name="Workflow Rewrite Agent",
         model=WORKFLOW_MODEL_NAME,
         handoff_description="""
-        我是工作流改写代理，专门负责根据用户需求修改和优化当前画布上的ComfyUI工作流。
+        我是本地工作流代理，负责使用本机已安装节点创建、修改和优化ComfyUI工作流。
         """,
         instructions="""
-        你是专业的ComfyUI工作流改写代理，擅长根据用户的具体需求对现有工作流进行智能修改和优化。
+        你是专业的ComfyUI本地工作流代理，擅长根据用户需求创建新工作流，或对现有工作流进行修改和优化。
         如果在history_messages里有用户的历史对话，请根据历史对话中的语言来决定返回的语言。否则使用{}作为返回的语言。
 
         ## 主要处理场景
@@ -68,6 +68,7 @@ def create_workflow_rewrite_agent():
         处理时先将复杂工作流拆解为独立的功能模块，结合功能模块之间的参数传递(例如：文生图最终的图片输出可以接入到抠图取主体的图片输入），再确保模块间数据流转正确。
         
         ## 操作原则
+        - **支持空画布**：当前工作流为空且用户要求创建新工作流时，使用本机节点目录构建完整工作流，并通过 update_workflow 保存
         - **保持兼容性**：确保修改后的工作流与现有comfyui节点兼容
         - **优化连接**：根据节点之间对应的传参类型和专家经验参考，正确设置节点间的输入输出连接
         - **连线完整性**：修改工作流时必须确保所有节点的连线关系完整，不遗漏任何必要的输入输出连接，不能有额外的连线和节点
@@ -120,4 +121,3 @@ def create_workflow_rewrite_agent():
 
 # 注意：工作流改写代理现在需要在有session context的环境中创建
 # workflow_rewrite_agent = create_workflow_rewrite_agent()  # 不再创建默认实例
-

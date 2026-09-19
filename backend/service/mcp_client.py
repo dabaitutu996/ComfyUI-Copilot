@@ -6,19 +6,19 @@ LastEditTime: 2025-12-24 19:03:58
 FilePath: /comfyui_copilot/backend/service/mcp-client.py
 Description: 这是默认设置,请设置`customMade`, 打开koroFileHeader查看配置 进行设置: https://github.com/OBKoro1/koro1FileHeader/wiki/%E9%85%8D%E7%BD%AE
 '''
-from ..service.workflow_rewrite_tools import get_current_workflow
-from ..utils.globals import BACKEND_BASE_URL, get_comfyui_copilot_api_key, DISABLE_WORKFLOW_GEN
+from ..service.workflow_rewrite_tools import get_current_workflow, get_node_infos, search_node_local
+from ..utils.key_utils import workflow_config_adapt
 from .. import core
 import asyncio
 import os
 import traceback
+from contextlib import AsyncExitStack
 from typing import List, Dict, Any, Optional
 
 try:
     from agents._config import set_default_openai_api
     from agents.agent import Agent
     from agents.items import ItemHelpers
-    from agents.mcp import MCPServerSse
     from agents.run import Runner
     from agents.tracing import set_tracing_disabled
     from agents import handoff, RunContextWrapper, HandoffInputData
@@ -105,7 +105,7 @@ async def comfyui_agent_invoke(messages: List[Dict[str, Any]], images: List[Imag
 
         # Get session_id and config from request context
         session_id = get_session_id()
-        config = get_config()
+        config = workflow_config_adapt(get_config())
         
         if not session_id:
             raise ValueError("No session_id found in request context")
@@ -117,30 +117,9 @@ async def comfyui_agent_invoke(messages: List[Dict[str, Any]], images: List[Imag
         messages = message_memory_optimize(session_id, messages)
         log.info(f"[MCP] Optimized messages count: {len(messages)}, messages: {messages}")
         
-        # Create MCP server instances
-        mcp_server = MCPServerSse(
-            params= {
-                "url": BACKEND_BASE_URL + "/mcp-server/mcp",
-                "timeout": 300.0,
-                "headers": {"X-Session-Id": session_id, "Authorization": f"Bearer {get_comfyui_copilot_api_key()}"}
-            },
-            cache_tools_list=True,
-            client_session_timeout_seconds=300.0
-        )
-        
-        bing_server = MCPServerSse(
-            params= {
-                "url": "https://mcp.api-inference.modelscope.net/8c9fe550938e4f/sse",
-                "timeout": 300.0,
-                "headers": {"X-Session-Id": session_id, "Authorization": f"Bearer {get_comfyui_copilot_api_key()}"}
-            },
-            cache_tools_list=True,
-            client_session_timeout_seconds=300.0
-        )
-        
-        server_list = [mcp_server, bing_server]
-        
-        async with mcp_server, bing_server:
+        server_list = []
+
+        async with AsyncExitStack():
             
             # 创建workflow_rewrite_agent实例 (session_id通过context获取)
             workflow_rewrite_agent_instance = create_workflow_rewrite_agent()
@@ -200,26 +179,14 @@ async def comfyui_agent_invoke(messages: List[Dict[str, Any]], images: List[Imag
                 on_handoff=on_handoff,
             )
             
-            # Construct instructions based on DISABLE_WORKFLOW_GEN
-            if DISABLE_WORKFLOW_GEN:
-                workflow_creation_instruction = """
-**CASE 3: SEARCH WORKFLOW**
-IF the user wants to find or generate a NEW workflow.
-- Keywords: "create", "generate", "search", "find", "recommend", "生成", "查找", "推荐".
-- Action: Use `recall_workflow`.
+            workflow_creation_instruction = """
+**CASE 3: CREATE A NEW WORKFLOW**
+IF the user wants to create or generate a NEW workflow from scratch.
+- Keywords: "create", "generate", "build", "new workflow", "生成", "创建", "搭建".
+- Action: IMMEDIATELY hand off to the `Workflow Rewrite Agent`. It can inspect locally installed nodes and create a complete workflow on an empty canvas.
 """
-                workflow_constraint = """
-- [Critical!] When the user's intent is to get workflows or generate images with specific requirements, you MUST call `recall_workflow` tool to find existing similar workflows.
-"""
-            else:
-                workflow_creation_instruction = """
-**CASE 3: CREATE NEW / SEARCH WORKFLOW**
-IF the user wants to find or generate a NEW workflow from scratch.
-- Keywords: "create", "generate", "search", "find", "recommend", "生成", "查找", "推荐".
-- Action: Use `recall_workflow` AND `gen_workflow`.
-"""
-                workflow_constraint = """
-- [Critical!] When the user's intent is to get workflows or generate images with specific requirements, you MUST ALWAYS call BOTH recall_workflow tool AND gen_workflow tool to provide comprehensive workflow options. Never call just one of these tools - both are required for complete workflow assistance. First call recall_workflow to find existing similar workflows, then call gen_workflow to generate new workflow options.
+            workflow_constraint = """
+- Never use remote workflow search, recommendation, web search, or MCP services. Use only the local ComfyUI node catalog and workflow tools.
 """
 
             agent = create_agent(
@@ -246,7 +213,7 @@ IF the user wants to:
 
 **ACTION:**
 - You MUST IMMEDIATELY handoff to the `Workflow Rewrite Agent`.
-- DO NOT call any other tools (like search_node, gen_workflow).
+- DO NOT call any other tools first.
 - DO NOT ask for more details. Just handoff.
 
 **CASE 2: ANALYZE CURRENT WORKFLOW**
@@ -281,8 +248,7 @@ You must adhere to the following constraints to complete the task:
 {workflow_constraint}
 - When the user's intent is to query, return the query result directly without attempting to assist the user in performing operations.
 - When the user's intent is to get prompts for image generation (like Stable Diffusion). Use specific descriptive language with proper weight modifiers (e.g., (word:1.2)), prefer English terms, and separate elements with commas. Include quality terms (high quality, detailed), style specifications (realistic, anime), lighting (cinematic, golden hour), and composition (wide shot, close up) as needed. When appropriate, include negative prompts to exclude unwanted elements. Return words divided by commas directly without any additional text.
-- If you cannot find the information needed to answer a query, consider using bing_search to obtain relevant information. For example, if search_node tool cannot find the node, you can use bing_search to obtain relevant information about those nodes or components.
-- If search_node tool cannot find the node, you MUST use bing_search to obtain relevant information about those nodes or components.
+- For questions about installed nodes, use `search_node_local` and `get_node_infos`. If a node is not installed, say so instead of using a remote search service.
 
 - **ERROR MESSAGE ANALYSIS** - When a user pastes specific error text/logs (containing terms like "Failed", "Error", "Traceback", or stack traces), prioritize providing troubleshooting help rather than invoking search tools. Follow these steps:
   1. Analyze the error to identify the root cause (error type, affected component, missing dependencies, etc.)
@@ -298,7 +264,7 @@ You must adhere to the following constraints to complete the task:
                 """,
                 mcp_servers=server_list,
                 handoffs=[handoff_rewrite],
-                tools=[get_current_workflow],
+                tools=[get_current_workflow, search_node_local, get_node_infos],
                 config=config
             )
 

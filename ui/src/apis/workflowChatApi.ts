@@ -9,14 +9,12 @@
 // Copyright (C) 2025 AIDC-AI
 // Licensed under the MIT License.
 
-import { config } from '../config'
 import { fetchApi } from "../Api";
 import { Message, ChatResponse, OptimizedWorkflowRequest, OptimizedWorkflowResponse, Node, ExtItem, TrackEventRequest } from "../types/types";
 import { generateUUID } from '../utils/uuid';
-import { encryptWithRsaPublicKey } from '../utils/crypto';
 import { app } from '../utils/comfyapp';
 
-const BASE_URL = config.apiBaseUrl
+const BASE_URL = ''
 
 const getApiKey = () => {
     const apiKey = localStorage.getItem('chatApiKey');
@@ -33,17 +31,15 @@ const setApiKey = (apiKey: string) => {
 
 // Get OpenAI configuration from localStorage
 const getOpenAiConfig = () => {
-    const openaiApiKey = localStorage.getItem('openaiApiKey');
-    const openaiBaseUrl = localStorage.getItem('openaiBaseUrl');
-    const rsaPublicKey = localStorage.getItem('rsaPublicKey');
-    const workflowLLMApiKey = localStorage.getItem('workflowLLMApiKey');
-    const workflowLLMBaseUrl = localStorage.getItem('workflowLLMBaseUrl');
+    const openaiApiKey = localStorage.getItem('workflowLLMApiKey') || localStorage.getItem('openaiApiKey');
+    const openaiBaseUrl = localStorage.getItem('workflowLLMBaseUrl') || localStorage.getItem('openaiBaseUrl');
+    const workflowLLMApiKey = openaiApiKey;
+    const workflowLLMBaseUrl = openaiBaseUrl;
     const workflowLLMModel = localStorage.getItem('workflowLLMModel');
     
     return { 
         openaiApiKey: openaiApiKey || '', 
         openaiBaseUrl: openaiBaseUrl || '', 
-        rsaPublicKey,
         workflowLLMApiKey: workflowLLMApiKey || '',
         workflowLLMBaseUrl: workflowLLMBaseUrl || '',
         workflowLLMModel: workflowLLMModel || '',
@@ -67,33 +63,8 @@ const checkAndSaveApiKey = (response: Response) => {
 
 export namespace WorkflowChatAPI {
   export async function trackEvent(
-    request: TrackEventRequest
+    _request: TrackEventRequest
   ): Promise<void> {
-    try {
-      // Use non-blocking fetch to avoid interrupting the main flow
-      const apiKey = getApiKey();
-      const browserLanguage = getBrowserLanguage();
-      request.session_id = localStorage.getItem("sessionId") || null;
-      fetch(`${BASE_URL}/api/chat/track_event`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'accept': 'application/json',
-          'Access-Control-Allow-Origin': '*',
-          'Authorization': `Bearer ${apiKey}`,
-          'trace-id': generateUUID(),
-          'Accept-Language': browserLanguage,
-        },
-        body: JSON.stringify(request),
-      }).catch(err => {
-        // Silently log errors without throwing exceptions
-        console.warn('Track event failed:', err);
-      });
-    } catch (error) {
-      // Catch any synchronous errors but don't interrupt the business flow
-      console.warn('Error preparing track event:', error);
-    }
-    // Return immediately without waiting for the response
     return Promise.resolve();
   }
   
@@ -147,7 +118,7 @@ export namespace WorkflowChatAPI {
     try {
       const apiKey = getApiKey();
       const browserLanguage = app.extensionManager.setting.get('Comfy.Locale');
-      const { openaiApiKey, openaiBaseUrl, rsaPublicKey, workflowLLMApiKey, workflowLLMBaseUrl, workflowLLMModel } = getOpenAiConfig();
+      const { openaiApiKey, openaiBaseUrl, workflowLLMApiKey, workflowLLMBaseUrl, workflowLLMModel } = getOpenAiConfig();
       // Generate a unique message ID for this chat request
       const messageId = generateUUID();
 
@@ -257,12 +228,11 @@ export namespace WorkflowChatAPI {
       };
       
       // Add OpenAI configuration headers if available
-      if (openaiApiKey && openaiApiKey.trim() !== '' && rsaPublicKey) {
-        try {
-          headers['Openai-Base-Url'] = openaiBaseUrl;
-        } catch (error) {
-          console.error('Error encrypting OpenAI API key:', error);
-        }
+      if (openaiBaseUrl) {
+        headers['Openai-Base-Url'] = openaiBaseUrl;
+      }
+      if (openaiApiKey) {
+        headers['Openai-Api-Key'] = openaiApiKey;
       }
       // Add Workflow LLM headers if available
       if (workflowLLMBaseUrl) {
@@ -287,12 +257,7 @@ export namespace WorkflowChatAPI {
         });
       }
 
-      let chatUrl = `/api/chat/invoke`
-      if(intent && intent !== '') {
-        chatUrl = `${BASE_URL}/api/chat/invoke`
-      } else {
-        headers['Openai-Api-Key'] = openaiApiKey;
-      }
+      const chatUrl = `/api/chat/invoke`
       const response = await fetch(chatUrl, {
         method: 'POST',
         headers: headers,
@@ -366,7 +331,7 @@ export namespace WorkflowChatAPI {
     try {
       const apiKey = getApiKey();
       const browserLanguage = getBrowserLanguage();
-      const { openaiApiKey, openaiBaseUrl, rsaPublicKey, workflowLLMApiKey, workflowLLMBaseUrl } = getOpenAiConfig();
+      const { openaiApiKey, openaiBaseUrl, workflowLLMApiKey, workflowLLMBaseUrl } = getOpenAiConfig();
       
       // Prepare headers
       const headers: Record<string, string> = {
@@ -379,14 +344,11 @@ export namespace WorkflowChatAPI {
       };
       
       // Add OpenAI configuration headers if available
-      if (openaiApiKey && openaiApiKey.trim() !== '' && rsaPublicKey) {
-        try {
-          const encryptedApiKey = await encryptWithRsaPublicKey(openaiApiKey as string, rsaPublicKey as string);
-          headers['Encrypted-Openai-Api-Key'] = encryptedApiKey;
-          headers['Openai-Base-Url'] = openaiBaseUrl;
-        } catch (error) {
-          console.error('Error encrypting OpenAI API key:', error);
-        }
+      if (openaiBaseUrl) {
+        headers['Openai-Base-Url'] = openaiBaseUrl;
+      }
+      if (openaiApiKey) {
+        headers['Openai-Api-Key'] = openaiApiKey;
       }
       // Add Workflow LLM headers if available
       if (workflowLLMBaseUrl) {
@@ -425,7 +387,7 @@ export namespace WorkflowChatAPI {
   export async function batchGetNodeInfo(nodeTypes: string[]): Promise<any> {
     const apiKey = getApiKey();
     const browserLanguage = getBrowserLanguage();
-    const { openaiApiKey, openaiBaseUrl, rsaPublicKey, workflowLLMApiKey, workflowLLMBaseUrl } = getOpenAiConfig();
+    const { openaiApiKey, openaiBaseUrl, workflowLLMApiKey, workflowLLMBaseUrl } = getOpenAiConfig();
     
     // Prepare headers
     const headers: Record<string, string> = {
@@ -436,14 +398,11 @@ export namespace WorkflowChatAPI {
     };
     
     // Add OpenAI configuration headers if available
-    if (openaiApiKey && openaiApiKey.trim() !== '' && rsaPublicKey) {
-      try {
-        const encryptedApiKey = await encryptWithRsaPublicKey(openaiApiKey as string, rsaPublicKey as string);
-        headers['Encrypted-Openai-Api-Key'] = encryptedApiKey;
-        headers['Openai-Base-Url'] = openaiBaseUrl;
-      } catch (error) {
-        console.error('Error encrypting OpenAI API key:', error);
-      }
+    if (openaiBaseUrl) {
+      headers['Openai-Base-Url'] = openaiBaseUrl;
+    }
+    if (openaiApiKey) {
+      headers['Openai-Api-Key'] = openaiApiKey;
     }
     // Add Workflow LLM headers if available
     if (workflowLLMBaseUrl) {
@@ -880,4 +839,3 @@ export namespace WorkflowChatAPI {
 }
 
   
-
